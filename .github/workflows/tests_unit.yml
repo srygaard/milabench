@@ -1,0 +1,110 @@
+name: unit
+
+on:
+  push:
+
+  # Runs for pull requests
+  pull_request:
+    branches:
+      - master
+
+  # Runs on publish
+  release:
+    types:
+      [published]
+
+  # Allow manual triggers
+  workflow_dispatch:
+
+env:
+  XDG_CACHE_HOME: /home/runner/work/milabench/cache
+  XDG_DATA_HOME: /home/runner/work/milabench/data
+  XDG_CONFIG_HOME: /home/runner/work/milabench/config
+  XDG_STATE_HOME: /home/runner/work/milabench/state
+
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    # Cancel previous jobs if a new version was pushed
+    concurrency:
+      group: "${{ github.ref }}-${{ matrix.arch }}"
+      cancel-in-progress: true
+
+    steps:
+      - uses: easimon/maximize-build-space@master
+        with:
+          remove-dotnet: 'true'
+          remove-codeql: 'true'
+          remove-haskell: 'true'
+          remove-android: 'true'
+          build-mount-path: /home/runner/work/milabench/
+          root-reserve-mb: 20000
+
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: dependencies
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          cd /home/runner/work/milabench/milabench
+          pip install virtualenv
+          virtualenv ./env
+          source ./env/bin/activate
+          #
+          pip install -U pip
+          pip install poetry
+          # poetry export --dev -f requirements.txt --output requirements-dev.txt
+          #
+          # poetry doesnot work when installing those !?
+          #
+          pip install antlr4-python3-runtime==4.9.3
+          pip install -e .
+          pip install -e benchmate
+          pip install coverage pytest-regressions pytest-cov pytest
+          
+
+      - name: Simple Template
+        run: |
+          source ./env/bin/activate
+          milabench new --name simplebench --template simple
+          cd benchmarks/simplebench
+          make tests
+          cd ..
+          rm -rf simplebench
+        
+      - name: Voir Template
+        run: |
+          source ./env/bin/activate
+          milabench new --name  voirbench --template voir
+          cd benchmarks/voirbench
+          make tests
+          cd ..
+          rm -rf voirbench
+        
+      - name: space
+        run: |
+          df -h
+
+      - name: tests
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN}}
+        run: |
+          source ./env/bin/activate
+          coverage run --source=milabench -m pytest --ignore=tests/integration tests/ -vv -x
+          coverage report -m
+          coverage xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          env_vars: PLATFORM,PYTHON
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
