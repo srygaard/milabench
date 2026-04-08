@@ -82,6 +82,7 @@ Create `artifacts/notes/event_log.md` and paste/fill:
 ### One time setup
 From repo root:
 
+- `uv venv --python 3.12 --seed --clear`
 - `source .env`
 - `uv run pip install -e .[${MILABENCH_GPU_ARCH}]`
 - `uv run milabench install --select "${MILABENCH_SELECT_BENCH}"`
